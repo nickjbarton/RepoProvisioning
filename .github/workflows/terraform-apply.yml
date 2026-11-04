@@ -50,7 +50,11 @@ jobs:
             echo "::error::APP_PRIVATE_KEY is not a valid RSA PEM key. Re-paste the full .pem file into the secret."
             exit 1
           fi
-          echo "GITHUB_APP_PEM_FILE=$RUNNER_TEMP/app.pem" >> "$GITHUB_ENV"
+          {
+            echo "GITHUB_APP_PEM_FILE<<PEM_EOF"
+            cat "$RUNNER_TEMP/app.pem"
+            echo "PEM_EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Init
         run: terraform init -input=false
