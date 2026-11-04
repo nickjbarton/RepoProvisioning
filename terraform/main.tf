@@ -1,6 +1,11 @@
 provider "github" {
   # Auth and owner come from env, set in the workflow:
   #   GITHUB_OWNER, GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, GITHUB_APP_PEM_FILE
+
+  # Space out write calls and retry 403 rate-limit responses (GitHub secondary limits).
+  parallel_requests = false
+  write_delay_ms    = 3000
+  max_retries       = 5
 }
 
 locals {
