@@ -1,0 +1,7 @@
+# Copy to <repo-name>.yaml (file name must equal the repo name) and open a PR.
+# Fields marked optional have defaults in terraform/main.tf.
+description: "Short description of what the repo is for"   # required
+codeowners: "@your-github-user-or-org/team"                 # required, becomes * owner in CODEOWNERS
+visibility: public                                          # optional, default: private
+topics: ["example"]                                         # optional
+required_reviews: 1                                         # optional, default: 1

@@ -1,0 +1,5 @@
+{
+  "name_pattern": "^[a-z][a-z0-9-]{2,49}$",
+  "allowed_visibility": ["public", "private"],
+  "min_required_reviews": 1
+}
