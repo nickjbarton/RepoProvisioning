@@ -1,0 +1,71 @@
+name: Repo provisioning - apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "repos/**"
+      - "terraform/**"
+      - "policy/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repo-provisioning-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply
+    runs-on: ubuntu-latest
+    environment: repo-provisioning-prod
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      GITHUB_OWNER: ${{ vars.GITHUB_OWNER }}
+      GITHUB_APP_ID: ${{ vars.GITHUB_APP_ID }}
+      GITHUB_APP_INSTALLATION_ID: ${{ vars.GITHUB_APP_INSTALLATION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Authenticate GitHub App
+        env:
+          GITHUB_APP_PEM_FILE_CONTENT: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$GITHUB_APP_PEM_FILE_CONTENT" > "$RUNNER_TEMP/app.pem"
+          echo "GITHUB_APP_PEM_FILE=$RUNNER_TEMP/app.pem" >> "$GITHUB_ENV"
+
+      - name: Init
+        run: terraform init -input=false
+        working-directory: terraform
+
+      - name: Install Conftest
+        env:
+          CONFTEST_VERSION: 0.56.0
+        run: |
+          curl -sSL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" | tar -xz -C /usr/local/bin conftest
+
+      - name: Plan
+        run: terraform plan -input=false -no-color -out=tfplan
+        working-directory: terraform
+
+      - name: Show plan as JSON
+        run: terraform show -json tfplan > "$RUNNER_TEMP/plan.json"
+        working-directory: terraform
+
+      - name: Compliance policy gate
+        run: conftest test "$RUNNER_TEMP/plan.json" --policy policy --data policy/data.json
+
+      - name: Apply
+        run: terraform apply -input=false -auto-approve tfplan
+        working-directory: terraform
+
+      - name: Remove PEM
+        if: always()
+        run: rm -f "$RUNNER_TEMP/app.pem"
