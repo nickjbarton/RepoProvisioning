@@ -1,0 +1,89 @@
+name: Repo provisioning - rate limit debug
+
+# Manual only. Plans and reads; never applies.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    name: Rate limit and plan trace
+    runs-on: ubuntu-latest
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+      GITHUB_OWNER: ${{ vars.REPO_OWNER }}
+      GITHUB_APP_ID: ${{ vars.APP_ID }}
+      GITHUB_APP_INSTALLATION_ID: ${{ vars.APP_INSTALLATION_ID }}
+      TF_LOG_PROVIDER: DEBUG
+      TF_LOG_PATH: ${{ runner.temp }}/tf-provider.log
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Authenticate GitHub App
+        env:
+          GITHUB_APP_PEM_FILE_CONTENT: ${{ secrets.APP_PRIVATE_KEY }}
+        run: |
+          printf '%s\n' "$GITHUB_APP_PEM_FILE_CONTENT" > "$RUNNER_TEMP/app.pem"
+          openssl rsa -in "$RUNNER_TEMP/app.pem" -noout -check > /dev/null
+          {
+            echo "GITHUB_APP_PEM_FILE<<PEM_EOF"
+            cat "$RUNNER_TEMP/app.pem"
+            echo "PEM_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Check installation rate limits
+        run: |
+          b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+          now=$(date +%s)
+          header=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url)
+          payload=$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$((now - 60))" "$((now + 540))" "$GITHUB_APP_ID" | b64url)
+          sig=$(printf '%s.%s' "$header" "$payload" | openssl dgst -sha256 -sign "$RUNNER_TEMP/app.pem" -binary | b64url)
+          token=$(curl -sS -X POST \
+            -H "Authorization: Bearer $header.$payload.$sig" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/app/installations/$GITHUB_APP_INSTALLATION_ID/access_tokens" \
+            | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("token", ""))')
+          echo "::add-mask::$token"
+          curl -sS -H "Authorization: token $token" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/rate_limit \
+            | python3 -I -c '
+          import json, sys, datetime
+          d = json.load(sys.stdin)
+          for name, r in d["resources"].items():
+              reset = datetime.datetime.fromtimestamp(r["reset"], datetime.timezone.utc).isoformat()
+              print(f"{name}: {r['"'"'remaining'"'"']}/{r['"'"'limit'"'"']} resets {reset}")
+          '
+
+      - name: Init
+        run: terraform init -input=false
+        working-directory: terraform
+
+      - name: Plan with provider trace
+        run: terraform plan -input=false -no-color -out=tfplan
+        working-directory: terraform
+
+      - name: Extract API trace
+        if: always()
+        run: |
+          grep -iE 'api\.github\.com|status ?code|x-ratelimit|retry-after|rate limit|secondary' "$TF_LOG_PATH" 2>/dev/null \
+            | grep -viE 'authorization' > "$RUNNER_TEMP/api-trace.txt" || true
+          echo "api.github.com lines in trace: $(grep -c 'api.github.com' "$RUNNER_TEMP/api-trace.txt" || true)"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-trace
+          path: ${{ runner.temp }}/api-trace.txt
+          if-no-files-found: warn
+
+      - name: Remove PEM
+        if: always()
+        run: rm -f "$RUNNER_TEMP/app.pem"
