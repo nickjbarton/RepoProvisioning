@@ -47,11 +47,11 @@ Tighten `allowed_visibility` to `["private"]` once the account has GitHub Pro or
 | Type | Name | Value |
 |---|---|---|
 | Variable | `TF_CLOUD_ORGANIZATION` | Your TF Cloud org |
-| Variable | `GITHUB_OWNER` | Owner of the target repos |
-| Variable | `GITHUB_APP_ID` | App ID |
-| Variable | `GITHUB_APP_INSTALLATION_ID` | Installation ID |
+| Variable | `REPO_OWNER` | Owner of the target repos |
+| Variable | `APP_ID` | App ID |
+| Variable | `APP_INSTALLATION_ID` | Installation ID |
 | Secret | `TF_API_TOKEN` | TF Cloud token |
-| Secret | `GITHUB_APP_PRIVATE_KEY` | Full contents of the `.pem` file |
+| Secret | `APP_PRIVATE_KEY` | Full contents of the `.pem` file |
 
 Create environment `repo-provisioning-prod` with required reviewers.
 

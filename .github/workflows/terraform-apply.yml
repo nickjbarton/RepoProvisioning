@@ -23,9 +23,9 @@ jobs:
     env:
       TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
-      GITHUB_OWNER: ${{ vars.GITHUB_OWNER }}
-      GITHUB_APP_ID: ${{ vars.GITHUB_APP_ID }}
-      GITHUB_APP_INSTALLATION_ID: ${{ vars.GITHUB_APP_INSTALLATION_ID }}
+      GITHUB_OWNER: ${{ vars.REPO_OWNER }}
+      GITHUB_APP_ID: ${{ vars.APP_ID }}
+      GITHUB_APP_INSTALLATION_ID: ${{ vars.APP_INSTALLATION_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +36,7 @@ jobs:
 
       - name: Authenticate GitHub App
         env:
-          GITHUB_APP_PEM_FILE_CONTENT: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          GITHUB_APP_PEM_FILE_CONTENT: ${{ secrets.APP_PRIVATE_KEY }}
         run: |
           printf '%s' "$GITHUB_APP_PEM_FILE_CONTENT" > "$RUNNER_TEMP/app.pem"
           echo "GITHUB_APP_PEM_FILE=$RUNNER_TEMP/app.pem" >> "$GITHUB_ENV"
