@@ -17,7 +17,7 @@ jobs:
       GITHUB_OWNER: ${{ vars.REPO_OWNER }}
       GITHUB_APP_ID: ${{ vars.APP_ID }}
       GITHUB_APP_INSTALLATION_ID: ${{ vars.APP_INSTALLATION_ID }}
-      TF_LOG_PROVIDER: DEBUG
+      TF_LOG_PROVIDER: TRACE
     steps:
       - uses: actions/checkout@v4
 
