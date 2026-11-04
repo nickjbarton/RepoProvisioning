@@ -8,7 +8,7 @@ Provisions GitHub repositories with Terraform and enforces compliance guardrails
 2. `terraform-plan.yml` runs fmt, validate, policy unit tests, plan, then Conftest against the plan JSON. Failing policy blocks the PR.
 3. Merge to `main`. `terraform-apply.yml` re-runs plan and the policy gate, then pauses at the `repo-provisioning-prod` environment for approval, then applies the saved plan.
 
-Each repo gets:
+Each repo gets :
 
 | Resource | Setting |
 |---|---|
