@@ -17,8 +17,7 @@ jobs:
       GITHUB_OWNER: ${{ vars.REPO_OWNER }}
       GITHUB_APP_ID: ${{ vars.APP_ID }}
       GITHUB_APP_INSTALLATION_ID: ${{ vars.APP_INSTALLATION_ID }}
-      TF_LOG_PROVIDER: DEBUG
-      TF_LOG_PATH: ${{ runner.temp }}/tf-provider.log
+      TF_LOG: TRACE
     steps:
       - uses: actions/checkout@v4
 
@@ -61,6 +60,9 @@ jobs:
               reset = datetime.datetime.fromtimestamp(r["reset"], datetime.timezone.utc).isoformat()
               print(f"{name}: {r['"'"'remaining'"'"']}/{r['"'"'limit'"'"']} resets {reset}")
           '
+
+      - name: Enable provider trace log
+        run: echo "TF_LOG_PATH=$RUNNER_TEMP/tf-provider.log" >> "$GITHUB_ENV"
 
       - name: Init
         run: terraform init -input=false
