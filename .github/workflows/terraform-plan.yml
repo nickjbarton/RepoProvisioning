@@ -44,7 +44,18 @@ jobs:
         env:
           GITHUB_APP_PEM_FILE_CONTENT: ${{ secrets.APP_PRIVATE_KEY }}
         run: |
-          printf '%s' "$GITHUB_APP_PEM_FILE_CONTENT" > "$RUNNER_TEMP/app.pem"
+          if [ -z "$GITHUB_APP_PEM_FILE_CONTENT" ]; then
+            echo "::error::APP_PRIVATE_KEY secret is empty or not available to this workflow"
+            exit 1
+          fi
+          printf '%s\n' "$GITHUB_APP_PEM_FILE_CONTENT" > "$RUNNER_TEMP/app.pem"
+          echo "APP_PRIVATE_KEY: $(wc -c < "$RUNNER_TEMP/app.pem") bytes, $(wc -l < "$RUNNER_TEMP/app.pem") lines"
+          echo "First line: $(head -n 1 "$RUNNER_TEMP/app.pem")"
+          echo "Last line: $(tail -n 1 "$RUNNER_TEMP/app.pem")"
+          if ! openssl rsa -in "$RUNNER_TEMP/app.pem" -noout -check > /dev/null 2>&1; then
+            echo "::error::APP_PRIVATE_KEY is not a valid RSA PEM key. Re-paste the full .pem file into the secret."
+            exit 1
+          fi
           echo "GITHUB_APP_PEM_FILE=$RUNNER_TEMP/app.pem" >> "$GITHUB_ENV"
 
       - name: Format check
