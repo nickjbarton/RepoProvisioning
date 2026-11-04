@@ -3,6 +3,6 @@
 #
 description: "testing repository provisioning"   # required
 codeowners: "@nickjbarton"                 # required, becomes * owner in CODEOWNERS
-visibility: private                                          # optional, default: private
+visibility: public                                          # optional, default: private
 topics: ["example"]                                         # optional
 required_reviews: 1                                     # optional, default: 1
