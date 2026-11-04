@@ -7,6 +7,7 @@ on:
       - "repos/**"
       - "terraform/**"
       - "policy/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,6 +27,7 @@ jobs:
       GITHUB_OWNER: ${{ vars.REPO_OWNER }}
       GITHUB_APP_ID: ${{ vars.APP_ID }}
       GITHUB_APP_INSTALLATION_ID: ${{ vars.APP_INSTALLATION_ID }}
+      TF_LOG: TRACE
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +58,9 @@ jobs:
             echo "PEM_EOF"
           } >> "$GITHUB_ENV"
 
+      - name: Enable provider trace log
+        run: echo "TF_LOG_PATH=$RUNNER_TEMP/tf-provider.log" >> "$GITHUB_ENV"
+
       - name: Init
         run: terraform init -input=false
         working-directory: terraform
@@ -80,6 +85,21 @@ jobs:
       - name: Apply
         run: terraform apply -input=false -auto-approve tfplan
         working-directory: terraform
+
+      - name: Extract API trace
+        if: always()
+        run: |
+          grep -E 'tf_http_|api\.github\.com' "$TF_LOG_PATH" 2>/dev/null \
+            | grep -viE 'authorization' > "$RUNNER_TEMP/api-trace.txt" || true
+          echo "tf_http lines in trace: $(grep -c 'tf_http_' "$RUNNER_TEMP/api-trace.txt" || true)"
+
+      - name: Upload API trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apply-api-trace
+          path: ${{ runner.temp }}/api-trace.txt
+          if-no-files-found: warn
 
       - name: Remove PEM
         if: always()
