@@ -10,10 +10,10 @@ locals {
     for f in local.repo_files :
     trimsuffix(f, ".yaml") => merge(
       {
-        visibility        = "private"
-        topics            = []
-        default_branch    = "main"
-        required_reviews  = 1
+        visibility       = "private"
+        topics           = []
+        default_branch   = "main"
+        required_reviews = 1
       },
       yamldecode(file("${path.module}/../repos/${f}"))
     )
