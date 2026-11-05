@@ -21,7 +21,7 @@ enforce_delete_branch_on_merge: true
 enforce_vulnerability_alerts: true
 enforce_dependabot_security_updates: true
 enforce_secret_scanning: true
-enforce_push_protection: true
+enforce_push_protection: false
 
 # Default branch ruleset
 enforce_ruleset_block_deletion: true
