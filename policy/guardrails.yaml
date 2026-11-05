@@ -26,7 +26,7 @@ min_required_reviews: 1
 enforce_delete_branch_on_merge: true
 enforce_vulnerability_alerts: true
 enforce_dependabot_security_updates: true
-enforce_secret_scanning: true
+enforce_secret_scanning: false
 enforce_push_protection: false
 
 # Default branch protection (a ruleset on the default branch)
@@ -38,7 +38,7 @@ enforce_ruleset_linear_history: true
 # Tighter (or equal) settings by repo visibility. Keys: any enforce_* flag, or min_required_reviews.
 visibility_profiles:
   public:
+    enforce_secret_scanning: true
     enforce_push_protection: true
     min_required_reviews: 2
-  private:
-    enforce_secret_scanning: true
+  private: {}
