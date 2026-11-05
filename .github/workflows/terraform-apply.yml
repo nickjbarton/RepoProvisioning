@@ -76,7 +76,7 @@ jobs:
         working-directory: terraform
 
       - name: Compliance policy gate
-        run: conftest test "$RUNNER_TEMP/plan.json" --policy policy --data policy/data.json
+        run: conftest test "$RUNNER_TEMP/plan.json" --policy policy --data policy/guardrails.yaml
 
       - name: Apply
         run: terraform apply -input=false -auto-approve tfplan

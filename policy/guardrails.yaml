@@ -1,0 +1,29 @@
+# Guardrail settings. This is the only file you need to edit to change a guardrail.
+#
+# Terraform reads this file to configure repos.
+# The policy reads this file to check the plan.
+#
+# Values: change the value after the colon. Keep the quotes and brackets if present.
+# Flags: true = enforced (Terraform sets it, the policy requires it). false = not enforced.
+# After editing, open a PR. The plan job shows which repos would fail.
+
+# Naming and visibility
+name_pattern: "^[a-z][a-z0-9-]{2,49}$"
+allowed_visibility: [public, private]
+default_visibility: private
+
+# Approvals
+default_required_reviews: 1
+min_required_reviews: 1
+
+# Repo settings
+enforce_delete_branch_on_merge: true
+enforce_vulnerability_alerts: true
+enforce_dependabot_security_updates: true
+enforce_secret_scanning: true
+enforce_push_protection: true
+
+# Default branch ruleset
+enforce_ruleset_block_deletion: true
+enforce_ruleset_block_force_push: true
+enforce_ruleset_linear_history: true
