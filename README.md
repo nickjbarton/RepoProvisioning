@@ -94,6 +94,27 @@ A new guardrail needs a Rego change. Steps:
 5. Add a config check for the new key. Copy an existing one, such as `deny contains msg if { not is_boolean(data.enforce_secret_scanning) ... }`, so a missing key fails the plan.
 6. Run the local checks below, then open a PR.
 
+### Visibility profiles
+
+Settings can differ by repo visibility. The `visibility_profiles` section of `policy/guardrails.yaml` holds one block per visibility:
+
+```yaml
+visibility_profiles:
+  public:
+    enforce_push_protection: true
+    min_required_reviews: 2
+  private: {}
+```
+
+Rules:
+
+- A profile can turn an `enforce_*` flag on, or raise `min_required_reviews`. It cannot turn a flag off or lower the minimum. Terraform stops the plan if it does.
+- A profile only lists the settings it changes. Everything else comes from the global values.
+- The profile is picked from the repo's `visibility`, which defaults to `default_visibility`.
+- Effective setting = global value, OR the profile for the repo's visibility, OR the repo's own `guardrails:` override.
+
+Example: `public` repos get push protection and two approvals. `private` repos get the global settings unless their own YAML changes them.
+
 ### Per-repo guardrails
 
 A repo can turn guardrails on for itself. This supports a risk-based approach: keep the global settings lenient, and enforce stricter controls on the repos that need them.
@@ -112,7 +133,7 @@ Rules:
 - A repo can set any `enforce_*` flag to `true`. This turns the guardrail on for that repo only.
 - A repo cannot set a flag to `false` when it is `true` in `guardrails.yaml`. Terraform stops the plan with a message naming the repo.
 - Unknown keys in `guardrails:` also stop the plan.
-- Name pattern, allowed visibility, default visibility and approval minimums are global. A repo can raise its own `required_reviews`, but not below `min_required_reviews`.
+- Name pattern, allowed visibility and default visibility are global. A repo can raise its own `required_reviews`, but not below its effective minimum, which is `min_required_reviews` raised by the visibility profile if that is higher.
 
 The policy checks each repo against its effective settings: the global value, or on if the repo turns it on. Terraform records those settings in a `terraform_data.effective_guardrails` resource per repo, and the policy reads them from the plan.
 

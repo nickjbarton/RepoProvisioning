@@ -197,13 +197,14 @@ deny contains msg if {
 	msg := sprintf("%s: ruleset must require linear history (enforce_ruleset_linear_history)", [rs.address])
 }
 
-# Approval minimum is global and cannot be lowered per repo.
+# Approval minimum is per repo: global, raised by the visibility profile or the repo.
 deny contains msg if {
 	some rs in rulesets
 	some rule in rs.values.rules
 	some pr in rule.pull_request
-	pr.required_approving_review_count < data.min_required_reviews
-	msg := sprintf("%s: requires at least %d approving review(s) (min_required_reviews)", [rs.address, data.min_required_reviews])
+	g := effective[rs.values.repository]
+	pr.required_approving_review_count < g.min_required_reviews
+	msg := sprintf("%s: requires at least %d approving review(s) (min_required_reviews for this repo)", [rs.address, g.min_required_reviews])
 }
 
 deny contains msg if {
