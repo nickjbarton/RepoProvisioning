@@ -2,9 +2,17 @@ package main
 
 import rego.v1
 
-# Rule logic only. Settings live in policy/guardrails.yaml, loaded as `data`.
-# A rule named after an enforce_* key runs only when that key is true.
+# Rule logic only. Global settings come from policy/guardrails.yaml (loaded as `data`).
+# Each repo's effective flags come from terraform_data.effective_guardrails in main.tf:
+# the global value, or true if the repo turns the flag on in its own YAML.
 # Evaluated against planned_values, so every repo in the configuration is checked on every plan.
+
+effective := {name: g |
+	some t in input.planned_values.root_module.resources
+	t.type == "terraform_data"
+	g := t.values.input
+	name := g.name
+}
 
 repos contains r if {
 	some r in input.planned_values.root_module.resources
@@ -26,7 +34,12 @@ rulesets contains r if {
 	r.type == "github_repository_ruleset"
 }
 
-# Config check: a missing key would otherwise silently turn a rule off.
+ruleset_repos contains name if {
+	some rs in rulesets
+	name := rs.values.repository
+}
+
+# Config checks: a missing key would otherwise silently turn a rule off.
 deny contains msg if {
 	not data.name_pattern
 	msg := "guardrails.yaml: 'name_pattern' is missing or has the wrong type"
@@ -50,6 +63,11 @@ deny contains msg if {
 deny contains msg if {
 	not is_number(data.default_required_reviews)
 	msg := "guardrails.yaml: 'default_required_reviews' is missing or has the wrong type"
+}
+
+deny contains msg if {
+	not is_boolean(data.enforce_branch_protection)
+	msg := "guardrails.yaml: 'enforce_branch_protection' is missing or has the wrong type"
 }
 
 deny contains msg if {
@@ -92,10 +110,11 @@ deny contains msg if {
 	msg := "guardrails.yaml: 'enforce_ruleset_linear_history' is missing or has the wrong type"
 }
 
+# Every repo must have effective flags in the plan.
 deny contains msg if {
 	some r in repos
-	not regex.match(data.name_pattern, r.values.name)
-	msg := sprintf("%s: name must match name_pattern (%s)", [r.address, data.name_pattern])
+	not effective[r.values.name]
+	msg := sprintf("%s: no effective guardrails for this repo", [r.address])
 }
 
 deny contains msg if {
@@ -105,66 +124,80 @@ deny contains msg if {
 }
 
 deny contains msg if {
-	data.enforce_delete_branch_on_merge
 	some r in repos
+	not regex.match(data.name_pattern, r.values.name)
+	msg := sprintf("%s: name must match name_pattern (%s)", [r.address, data.name_pattern])
+}
+
+deny contains msg if {
+	some r in repos
+	effective[r.values.name].enforce_branch_protection == true
+	not ruleset_repos[r.values.name]
+	msg := sprintf("%s: enforce_branch_protection is on but no default-branch ruleset is planned", [r.address])
+}
+
+deny contains msg if {
+	some r in repos
+	effective[r.values.name].enforce_delete_branch_on_merge == true
 	not r.values.delete_branch_on_merge == true
 	msg := sprintf("%s: delete_branch_on_merge must be true (enforce_delete_branch_on_merge)", [r.address])
 }
 
 deny contains msg if {
-	data.enforce_secret_scanning
 	some r in repos
+	effective[r.values.name].enforce_secret_scanning == true
 	some saa in r.values.security_and_analysis
 	not secret_scanning_enabled(saa)
 	msg := sprintf("%s: secret scanning must be enabled (enforce_secret_scanning)", [r.address])
 }
 
 deny contains msg if {
-	data.enforce_push_protection
 	some r in repos
+	effective[r.values.name].enforce_push_protection == true
 	some saa in r.values.security_and_analysis
 	not push_protection_enabled(saa)
 	msg := sprintf("%s: push protection must be enabled (enforce_push_protection)", [r.address])
 }
 
 deny contains msg if {
-	data.enforce_vulnerability_alerts
 	some a in alerts
+	effective[a.values.repository].enforce_vulnerability_alerts == true
 	not a.values.enabled == true
 	msg := sprintf("%s: vulnerability alerts must be enabled (enforce_vulnerability_alerts)", [a.address])
 }
 
 deny contains msg if {
-	data.enforce_dependabot_security_updates
 	some d in dependabot
+	effective[d.values.repository].enforce_dependabot_security_updates == true
 	not d.values.enabled == true
 	msg := sprintf("%s: Dependabot security updates must be enabled (enforce_dependabot_security_updates)", [d.address])
 }
 
 deny contains msg if {
-	data.enforce_ruleset_block_deletion
 	some rs in rulesets
+	effective[rs.values.repository].enforce_ruleset_block_deletion == true
 	some rule in rs.values.rules
 	not rule.deletion == true
 	msg := sprintf("%s: ruleset must block branch deletion (enforce_ruleset_block_deletion)", [rs.address])
 }
 
 deny contains msg if {
-	data.enforce_ruleset_block_force_push
 	some rs in rulesets
+	effective[rs.values.repository].enforce_ruleset_block_force_push == true
 	some rule in rs.values.rules
 	not rule.non_fast_forward == true
 	msg := sprintf("%s: ruleset must block force-push (enforce_ruleset_block_force_push)", [rs.address])
 }
 
 deny contains msg if {
-	data.enforce_ruleset_linear_history
 	some rs in rulesets
+	effective[rs.values.repository].enforce_ruleset_linear_history == true
 	some rule in rs.values.rules
 	not rule.required_linear_history == true
 	msg := sprintf("%s: ruleset must require linear history (enforce_ruleset_linear_history)", [rs.address])
 }
 
+# Approval minimum is global and cannot be lowered per repo.
 deny contains msg if {
 	some rs in rulesets
 	some rule in rs.values.rules

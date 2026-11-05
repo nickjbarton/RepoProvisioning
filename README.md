@@ -29,6 +29,7 @@ One file per repo, named `<repo-name>.yaml`. The file name must match the repo n
 | `visibility` | No | `default_visibility` (private) | Must be in `allowed_visibility` |
 | `topics` | No | `[]` | |
 | `required_reviews` | No | `default_required_reviews` (1) | Must be at least `min_required_reviews` |
+| `guardrails` | No | None | Turns `enforce_*` flags on for this repo only. See [Per-repo guardrails](#per-repo-guardrails). |
 
 ## Guardrails
 
@@ -43,6 +44,7 @@ Every guardrail setting lives in `policy/guardrails.yaml`. Terraform reads it to
 | `default_visibility` | Text | Visibility used when a repo YAML does not set one |
 | `default_required_reviews` | Number | Approvals used when a repo YAML does not set one |
 | `min_required_reviews` | Number | Minimum approvals a ruleset may require |
+| `enforce_branch_protection` | `true`/`false` | A ruleset on the default branch is created |
 | `enforce_delete_branch_on_merge` | `true`/`false` | Delete head branches on merge |
 | `enforce_vulnerability_alerts` | `true`/`false` | Vulnerability alerts on |
 | `enforce_dependabot_security_updates` | `true`/`false` | Dependabot security updates on |
@@ -92,11 +94,35 @@ A new guardrail needs a Rego change. Steps:
 5. Add a config check for the new key. Copy an existing one, such as `deny contains msg if { not is_boolean(data.enforce_secret_scanning) ... }`, so a missing key fails the plan.
 6. Run the local checks below, then open a PR.
 
+### Per-repo guardrails
+
+A repo can turn guardrails on for itself. This supports a risk-based approach: keep the global settings lenient, and enforce stricter controls on the repos that need them.
+
+```yaml
+# repos/payments-api.yaml
+description: "Payments API"
+codeowners: "@org/payments"
+guardrails:
+  enforce_branch_protection: true
+  enforce_ruleset_linear_history: true
+```
+
+Rules:
+
+- A repo can set any `enforce_*` flag to `true`. This turns the guardrail on for that repo only.
+- A repo cannot set a flag to `false` when it is `true` in `guardrails.yaml`. Terraform stops the plan with a message naming the repo.
+- Unknown keys in `guardrails:` also stop the plan.
+- Name pattern, allowed visibility, default visibility and approval minimums are global. A repo can raise its own `required_reviews`, but not below `min_required_reviews`.
+
+The policy checks each repo against its effective settings: the global value, or on if the repo turns it on. Terraform records those settings in a `terraform_data.effective_guardrails` resource per repo, and the policy reads them from the plan.
+
+Example: keep `enforce_branch_protection: false` globally, so most repos get no ruleset. Repos that need branch protection add `enforce_branch_protection: true` in their YAML.
+
 ### Files
 
 | File | Purpose |
 |---|---|
-| `policy/guardrails.yaml` | Settings. Edit this to change a guardrail. |
+| `policy/guardrails.yaml` | Global settings. Edit this to change a guardrail for all repos. |
 | `policy/guardrails.rego` | Rule logic. One rule per guardrail. |
 | `policy/guardrails_test.rego` | Unit tests for the rules. |
 | `terraform/main.tf` | Reads the settings and configures repos. |
@@ -158,4 +184,5 @@ cd .. && conftest verify --policy policy --data policy/guardrails.yaml
 
 - The policy checks planned state from Terraform, so it only sees what the provider reads. Settings that the provider does not read, or that Terraform does not manage, are not checked.
 - A new key is only validated if a config check is added for it in `policy/guardrails.rego`. Add one when you add a key.
+- Repo overrides are checked by Terraform's precondition, which runs during plan. The policy only sees the effective result.
 - The checks rely on the attribute names in the Terraform provider. A provider upgrade can rename an attribute, so the tests should be run after upgrading `integrations/github`.

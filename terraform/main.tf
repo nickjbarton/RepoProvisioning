@@ -12,6 +12,9 @@ locals {
   # Shared with the policy. Edit policy/guardrails.yaml, not this file, to change guardrails.
   guardrails = yamldecode(file("${path.module}/../policy/guardrails.yaml"))
 
+  # Flags a repo may turn on in its own YAML under `guardrails:`.
+  override_flags = [for k in keys(local.guardrails) : k if substr(k, 0, 8) == "enforce_"]
+
   repo_files = fileset("${path.module}/../repos", "*.yaml")
 
   repositories = {
@@ -22,14 +25,33 @@ locals {
         topics           = []
         default_branch   = "main"
         required_reviews = local.guardrails.default_required_reviews
+        guardrails       = {}
       },
       yamldecode(file("${path.module}/../repos/${f}"))
     )
+  }
+
+  # Effective flag per repo: the global value, or true if the repo turns it on.
+  # A repo cannot turn a flag off (see the precondition on github_repository).
+  effective = {
+    for name, r in local.repositories : name => {
+      for f in local.override_flags : f => local.guardrails[f] || lookup(r.guardrails, f, false)
+    }
   }
 }
 
 resource "github_repository" "this" {
   for_each = local.repositories
+
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        for f, v in each.value.guardrails :
+        contains(local.override_flags, f) && (v == true || lookup(local.guardrails, f, false) == false)
+      ])
+      error_message = "${each.key}: guardrails in the repo file can only turn a guardrail on. Remove unknown keys and any false value for a guardrail that is on in policy/guardrails.yaml."
+    }
+  }
 
   name                   = each.key
   description            = each.value.description
@@ -37,34 +59,41 @@ resource "github_repository" "this" {
   topics                 = each.value.topics
   auto_init              = true
   has_issues             = true
-  delete_branch_on_merge = local.guardrails.enforce_delete_branch_on_merge
+  delete_branch_on_merge = local.effective[each.key].enforce_delete_branch_on_merge
 
   security_and_analysis {
     secret_scanning {
-      status = local.guardrails.enforce_secret_scanning ? "enabled" : "disabled"
+      status = local.effective[each.key].enforce_secret_scanning ? "enabled" : "disabled"
     }
     secret_scanning_push_protection {
-      status = local.guardrails.enforce_push_protection ? "enabled" : "disabled"
+      status = local.effective[each.key].enforce_push_protection ? "enabled" : "disabled"
     }
   }
+}
+
+# Carries each repo's effective guardrails into the plan so the policy can check them.
+resource "terraform_data" "effective_guardrails" {
+  for_each = local.repositories
+
+  input = merge({ name = each.key }, local.effective[each.key])
 }
 
 resource "github_repository_vulnerability_alerts" "this" {
   for_each = local.repositories
 
   repository = github_repository.this[each.key].name
-  enabled    = local.guardrails.enforce_vulnerability_alerts
+  enabled    = local.effective[each.key].enforce_vulnerability_alerts
 }
 
 resource "github_repository_dependabot_security_updates" "this" {
   for_each = local.repositories
 
   repository = github_repository.this[each.key].name
-  enabled    = local.guardrails.enforce_dependabot_security_updates
+  enabled    = local.effective[each.key].enforce_dependabot_security_updates
 }
 
 resource "github_repository_ruleset" "default_branch" {
-  for_each = local.repositories
+  for_each = { for k, r in local.repositories : k => r if local.effective[k].enforce_branch_protection }
 
   # CODEOWNERS must land before the ruleset blocks direct pushes to the default branch.
   depends_on = [github_repository_file.codeowners]
@@ -82,9 +111,9 @@ resource "github_repository_ruleset" "default_branch" {
   }
 
   rules {
-    deletion                = local.guardrails.enforce_ruleset_block_deletion
-    non_fast_forward        = local.guardrails.enforce_ruleset_block_force_push
-    required_linear_history = local.guardrails.enforce_ruleset_linear_history
+    deletion                = local.effective[each.key].enforce_ruleset_block_deletion
+    non_fast_forward        = local.effective[each.key].enforce_ruleset_block_force_push
+    required_linear_history = local.effective[each.key].enforce_ruleset_linear_history
 
     pull_request {
       required_approving_review_count   = each.value.required_reviews
