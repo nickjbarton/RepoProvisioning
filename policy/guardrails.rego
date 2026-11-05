@@ -2,91 +2,89 @@ package main
 
 import rego.v1
 
-# Evaluated against `terraform show -json` output. Thresholds live in data.json.
+# Evaluated against `terraform show -json` planned_values, so every repo in the
+# configuration is checked on every plan, including repos that are not changing.
+# Thresholds live in data.json.
 
-repo_creates contains rc if {
-	some rc in input.resource_changes
-	rc.type == "github_repository"
-	"create" in rc.change.actions
+repos contains r if {
+	some r in input.planned_values.root_module.resources
+	r.type == "github_repository"
 }
 
-alert_creates contains rc if {
-	some rc in input.resource_changes
-	rc.type == "github_repository_vulnerability_alerts"
-	"create" in rc.change.actions
+alerts contains r if {
+	some r in input.planned_values.root_module.resources
+	r.type == "github_repository_vulnerability_alerts"
 }
 
-ruleset_creates contains rc if {
-	some rc in input.resource_changes
-	rc.type == "github_repository_ruleset"
-	"create" in rc.change.actions
-}
-
-deny contains msg if {
-	some rc in repo_creates
-	name := rc.change.after.name
-	not regex.match(data.name_pattern, name)
-	msg := sprintf("%s: name must match %s", [rc.address, data.name_pattern])
+rulesets contains r if {
+	some r in input.planned_values.root_module.resources
+	r.type == "github_repository_ruleset"
 }
 
 deny contains msg if {
-	some rc in repo_creates
-	not rc.change.after.visibility in data.allowed_visibility
-	msg := sprintf("%s: visibility '%s' not allowed (allowed: %v)", [rc.address, rc.change.after.visibility, data.allowed_visibility])
+	some r in repos
+	not regex.match(data.name_pattern, r.values.name)
+	msg := sprintf("%s: name must match %s", [r.address, data.name_pattern])
 }
 
 deny contains msg if {
-	some rc in repo_creates
-	not rc.change.after.delete_branch_on_merge == true
-	msg := sprintf("%s: delete_branch_on_merge must be true", [rc.address])
+	some r in repos
+	not r.values.visibility in data.allowed_visibility
+	msg := sprintf("%s: visibility '%s' not allowed (allowed: %v)", [r.address, r.values.visibility, data.allowed_visibility])
 }
 
 deny contains msg if {
-	some rc in alert_creates
-	not rc.change.after.enabled == true
-	msg := sprintf("%s: vulnerability alerts must be enabled", [rc.address])
+	some r in repos
+	not r.values.delete_branch_on_merge == true
+	msg := sprintf("%s: delete_branch_on_merge must be true", [r.address])
 }
 
 deny contains msg if {
-	some rc in repo_creates
-	some saa in rc.change.after.security_and_analysis
+	some a in alerts
+	not a.values.enabled == true
+	msg := sprintf("%s: vulnerability alerts must be enabled", [a.address])
+}
+
+deny contains msg if {
+	some r in repos
+	some saa in r.values.security_and_analysis
 	not secret_scanning_enabled(saa)
-	msg := sprintf("%s: secret_scanning must be enabled", [rc.address])
+	msg := sprintf("%s: secret_scanning must be enabled", [r.address])
 }
 
 deny contains msg if {
-	some rc in repo_creates
-	some saa in rc.change.after.security_and_analysis
+	some r in repos
+	some saa in r.values.security_and_analysis
 	not push_protection_enabled(saa)
-	msg := sprintf("%s: secret_scanning_push_protection must be enabled", [rc.address])
+	msg := sprintf("%s: secret_scanning_push_protection must be enabled", [r.address])
 }
 
 deny contains msg if {
-	some rc in ruleset_creates
-	some r in rc.change.after.rules
-	not r.deletion == true
-	msg := sprintf("%s: ruleset must block branch deletion", [rc.address])
+	some rs in rulesets
+	some rule in rs.values.rules
+	not rule.deletion == true
+	msg := sprintf("%s: ruleset must block branch deletion", [rs.address])
 }
 
 deny contains msg if {
-	some rc in ruleset_creates
-	some r in rc.change.after.rules
-	not r.non_fast_forward == true
-	msg := sprintf("%s: ruleset must block force-push", [rc.address])
+	some rs in rulesets
+	some rule in rs.values.rules
+	not rule.non_fast_forward == true
+	msg := sprintf("%s: ruleset must block force-push", [rs.address])
 }
 
 deny contains msg if {
-	some rc in ruleset_creates
-	some r in rc.change.after.rules
-	some pr in r.pull_request
+	some rs in rulesets
+	some rule in rs.values.rules
+	some pr in rule.pull_request
 	pr.required_approving_review_count < data.min_required_reviews
-	msg := sprintf("%s: requires at least %d approving review(s)", [rc.address, data.min_required_reviews])
+	msg := sprintf("%s: requires at least %d approving review(s)", [rs.address, data.min_required_reviews])
 }
 
 deny contains msg if {
-	some rc in ruleset_creates
-	count(rc.change.after.rules) == 0
-	msg := sprintf("%s: ruleset has no rules", [rc.address])
+	some rs in rulesets
+	count(object.get(rs.values, "rules", [])) == 0
+	msg := sprintf("%s: ruleset has no rules", [rs.address])
 }
 
 secret_scanning_enabled(saa) if {

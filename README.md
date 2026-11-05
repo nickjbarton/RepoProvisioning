@@ -65,7 +65,7 @@ Guardrails come in two kinds. Which kind a rule is determines where you change i
 
 ### What is checked
 
-The policy checks resources that are **being created** in the plan. A resource that already exists and is not changed is not re-checked. Changing a threshold in `data.json` therefore does not flag existing repos. It applies to repos created or changed after the change.
+The policy checks the **planned state of every repo** in `repos/`, including repos that are not changing. Each plan re-evaluates all of them against the current `data.json` and rules. Changing a threshold therefore fails the plan for any existing repo that no longer complies. Fix the repo, or revert the threshold, before merging.
 
 ## Changing a parameter
 
@@ -75,7 +75,7 @@ Example: raise `min_required_reviews` from 1 to 2.
 2. Run the local checks below. If an existing test depends on the old value, update the test.
 3. Open a PR. The plan workflow runs the policy against the new value.
 
-The change affects new repos and any repo whose ruleset is created by the plan. Per-repo `required_reviews` values below the new minimum will fail.
+The change applies to every repo in `repos/` on the next plan. A repo whose ruleset requires fewer approvals than the new minimum fails the plan, and so does any per-repo `required_reviews` below the minimum.
 
 ## Adding a new guardrail
 
@@ -100,7 +100,7 @@ Use this when the rule needs a value someone may want to change.
    deny contains msg if {
    	some rc in repo_creates
    	count(rc.change.after.description) > data.max_description_length
-   	msg := sprintf("%s: description must be at most %d characters", [rc.address, data.max_description_length])
+   	msg := sprintf("%s: description must be at most %d characters", [r.address, data.max_description_length])
    }
    ```
 
@@ -111,7 +111,7 @@ Use this when the rule needs a value someone may want to change.
 Use this when the rule checks an attribute of a resource.
 
 1. Set the attribute in `terraform/main.tf`. If it is a new resource type, add it with `for_each = local.repositories`.
-2. Add a `deny` rule. Use `repo_creates` for `github_repository`, or add a new `<type>_creates` set like the existing ones:
+2. Add a `deny` rule. Use `repos` for `github_repository`, or add a new set like `repos` that selects the resource type from `input.planned_values.root_module.resources`:
 
    ```rego
    deny contains msg if {
@@ -184,6 +184,6 @@ cd .. && conftest verify --policy policy --data policy/data.json
 
 ## Known gaps
 
-- Only resources being created are checked. Drift and in-place updates are not checked by the policy.
+- The policy checks planned state from Terraform, so it only sees what the provider reads. Settings that the provider does not read, or that Terraform does not manage, are not checked.
 - Fixed guardrails are hardcoded. There is no parameter for them.
 - The checks rely on the attribute names in the Terraform provider. A provider upgrade can rename an attribute, so the tests should be run after upgrading `integrations/github`.
