@@ -5,6 +5,8 @@
 #
 # Values: change the value after the colon. Keep the quotes and brackets if present.
 # Flags: true = enforced (Terraform sets it, the policy requires it). false = not enforced.
+# A repo can turn any enforce_* flag ON in its own YAML (guardrails: section).
+# A repo cannot turn a flag OFF if it is ON here. Thresholds below are global.
 # After editing, open a PR. The plan job shows which repos would fail.
 
 # Naming and visibility
@@ -23,7 +25,8 @@ enforce_dependabot_security_updates: true
 enforce_secret_scanning: true
 enforce_push_protection: false
 
-# Default branch ruleset
+# Default branch protection (a ruleset on the default branch)
+enforce_branch_protection: true
 enforce_ruleset_block_deletion: true
 enforce_ruleset_block_force_push: true
 enforce_ruleset_linear_history: true

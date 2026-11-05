@@ -1,7 +1,11 @@
 # Copy to <repo-name>.yaml (file name must equal the repo name) and open a PR.
-# Fields marked optional have defaults in terraform/main.tf.
+# Fields marked optional have defaults in policy/guardrails.yaml.
 description: "Short description of what the repo is for"   # required
 codeowners: "@your-github-user-or-org/team"                 # required, becomes * owner in CODEOWNERS
-visibility: public                                          # optional, default: private
+visibility: public                                          # optional, default: default_visibility
 topics: ["example"]                                         # optional
-required_reviews: 1                                         # optional, default: 1
+required_reviews: 1                                         # optional, default: default_required_reviews
+# Optional: turn guardrails ON for this repo only. Values here can only enable a guardrail.
+# guardrails:
+#   enforce_branch_protection: true
+#   enforce_ruleset_linear_history: true
