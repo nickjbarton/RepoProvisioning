@@ -7,4 +7,4 @@ visibility: public                               # optional, default: private
 topics: ["example"]                              # optional
 required_reviews: 1                              # optional, default: 1
 guardrails:
-  enforce_branch_protection: true
+  enforce_push_protection: true
