@@ -98,8 +98,8 @@ Use this when the rule needs a value someone may want to change.
 
    ```rego
    deny contains msg if {
-   	some rc in repo_creates
-   	count(rc.change.after.description) > data.max_description_length
+   	some r in repos
+   	count(r.values.description) > data.max_description_length
    	msg := sprintf("%s: description must be at most %d characters", [r.address, data.max_description_length])
    }
    ```
@@ -115,9 +115,9 @@ Use this when the rule checks an attribute of a resource.
 
    ```rego
    deny contains msg if {
-   	some rc in repo_creates
-   	rc.change.after.has_wiki == true
-   	msg := sprintf("%s: wiki must be disabled", [rc.address])
+   	some r in repos
+   	r.values.has_wiki == true
+   	msg := sprintf("%s: wiki must be disabled", [r.address])
    }
    ```
 
