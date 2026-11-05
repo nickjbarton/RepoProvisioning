@@ -75,7 +75,7 @@ jobs:
         working-directory: terraform
 
       - name: Policy unit tests
-        run: conftest verify --policy policy --data policy/data.json
+        run: conftest verify --policy policy --data policy/guardrails.yaml
 
       - name: Plan
         id: plan
@@ -87,7 +87,7 @@ jobs:
         working-directory: terraform
 
       - name: Compliance policy check
-        run: conftest test "$RUNNER_TEMP/plan.json" --policy policy --data policy/data.json --output github
+        run: conftest test "$RUNNER_TEMP/plan.json" --policy policy --data policy/guardrails.yaml --output github
 
       - name: Remove PEM
         if: always()

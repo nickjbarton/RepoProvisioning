@@ -26,112 +26,84 @@ One file per repo, named `<repo-name>.yaml`. The file name must match the repo n
 |---|---|---|---|
 | `description` | Yes | None | Shown on the repo |
 | `codeowners` | Yes | None | Written as the `*` owner in CODEOWNERS, for example `@org/team` |
-| `visibility` | No | `private` | Must be in `allowed_visibility` |
+| `visibility` | No | `default_visibility` (private) | Must be in `allowed_visibility` |
 | `topics` | No | `[]` | |
-| `required_reviews` | No | `1` | Must be at least `min_required_reviews` |
+| `required_reviews` | No | `default_required_reviews` (1) | Must be at least `min_required_reviews` |
 
 ## Guardrails
 
-Guardrails come in two kinds. Which kind a rule is determines where you change it.
+Every guardrail setting lives in `policy/guardrails.yaml`. Terraform reads it to configure repos, and the policy reads it to check the plan. To change a guardrail, edit that one file.
 
-**Parameter guardrails** take a value from `policy/data.json`:
+### Settings
 
-| Parameter | Current value | Effect |
+| Key | Type | Effect |
 |---|---|---|
-| `name_pattern` | `^[a-z][a-z0-9-]{2,49}$` | Repo names must match this regex |
-| `allowed_visibility` | `["public", "private"]` | Visibility must be one of these values |
-| `min_required_reviews` | `1` | Rulesets must require at least this many approvals |
+| `name_pattern` | Regex | Repo names must match |
+| `allowed_visibility` | List | Visibility must be one of these values |
+| `default_visibility` | Text | Visibility used when a repo YAML does not set one |
+| `default_required_reviews` | Number | Approvals used when a repo YAML does not set one |
+| `min_required_reviews` | Number | Minimum approvals a ruleset may require |
+| `enforce_delete_branch_on_merge` | `true`/`false` | Delete head branches on merge |
+| `enforce_vulnerability_alerts` | `true`/`false` | Vulnerability alerts on |
+| `enforce_dependabot_security_updates` | `true`/`false` | Dependabot security updates on |
+| `enforce_secret_scanning` | `true`/`false` | Secret scanning on |
+| `enforce_push_protection` | `true`/`false` | Secret scanning push protection on |
+| `enforce_ruleset_block_deletion` | `true`/`false` | Ruleset blocks branch deletion |
+| `enforce_ruleset_block_force_push` | `true`/`false` | Ruleset blocks force-push |
+| `enforce_ruleset_linear_history` | `true`/`false` | Ruleset requires linear history |
 
-**Fixed guardrails** are hardcoded in `policy/guardrails.rego`. Changing them is a code change:
+A `true` flag means Terraform sets the setting and the policy requires it. A `false` flag means neither does. A missing key, or a value of the wrong type, fails the plan with a message naming the key.
 
-| Rule | Denies |
-|---|---|
-| Branch deletion on merge | `delete_branch_on_merge` is not `true` |
-| Vulnerability alerts | `github_repository_vulnerability_alerts` is not enabled |
-| Secret scanning | Secret scanning is not `enabled` |
-| Push protection | Secret scanning push protection is not `enabled` |
-| Ruleset deletion block | The ruleset does not block branch deletion |
-| Ruleset force-push block | The ruleset does not block force-push |
-| Ruleset rules present | The ruleset has no rules |
+### Change a guardrail
+
+No code is needed for these changes.
+
+1. Create a branch and edit `policy/guardrails.yaml`.
+2. Change a value, or flip a flag.
+3. Open a PR. The plan job checks every repo against the new settings. A failure names the key that caused it.
+4. Merge. The apply job re-runs the same check before applying.
+
+Examples:
+
+- Require two approvals: set `min_required_reviews: 2`.
+- Allow internal repos: set `allowed_visibility: [public, private, internal]`.
+- Stop requiring linear history: set `enforce_ruleset_linear_history: false`.
+
+Changes apply to every repo in `repos/` on the next plan. Turning a flag off also stops Terraform from setting that option on existing repos at the next apply.
+
+### Add a new guardrail
+
+A new guardrail needs a Rego change. Steps:
+
+1. Add the key to `policy/guardrails.yaml` with a value.
+2. Use it in `terraform/main.tf` as `local.guardrails.<key>` for the setting it controls.
+3. Add a `deny` rule to `policy/guardrails.rego` that runs only when the key is true:
+
+   ```rego
+   deny contains msg if {
+   	data.enforce_wiki_disabled
+   	some r in repos
+   	r.values.has_wiki == true
+   	msg := sprintf("%s: wiki must be disabled (enforce_wiki_disabled)", [r.address])
+   }
+   ```
+
+4. Add a passing test and a failing test to `policy/guardrails_test.rego`. Pin the key in each test with `with data.<key> as <value>`, so the tests do not depend on the shipped file.
+5. Add a config check for the new key. Copy an existing one, such as `deny contains msg if { not is_boolean(data.enforce_secret_scanning) ... }`, so a missing key fails the plan.
+6. Run the local checks below, then open a PR.
 
 ### Files
 
 | File | Purpose |
 |---|---|
-| `policy/data.json` | Parameter values |
-| `policy/guardrails.rego` | Rule logic. Each `deny` block produces one failure message. |
-| `policy/guardrails_test.rego` | Unit tests. Each test passes a fake plan to the rules. |
-| `terraform/main.tf` | The resource settings the rules check. A rule can only check what Terraform sets. |
+| `policy/guardrails.yaml` | Settings. Edit this to change a guardrail. |
+| `policy/guardrails.rego` | Rule logic. One rule per guardrail. |
+| `policy/guardrails_test.rego` | Unit tests for the rules. |
+| `terraform/main.tf` | Reads the settings and configures repos. |
 
 ### What is checked
 
-The policy checks the **planned state of every repo** in `repos/`, including repos that are not changing. Each plan re-evaluates all of them against the current `data.json` and rules. Changing a threshold therefore fails the plan for any existing repo that no longer complies. Fix the repo, or revert the threshold, before merging.
-
-## Changing a parameter
-
-Example: raise `min_required_reviews` from 1 to 2.
-
-1. Edit `policy/data.json`.
-2. Run the local checks below. If an existing test depends on the old value, update the test.
-3. Open a PR. The plan workflow runs the policy against the new value.
-
-The change applies to every repo in `repos/` on the next plan. A repo whose ruleset requires fewer approvals than the new minimum fails the plan, and so does any per-repo `required_reviews` below the minimum.
-
-## Adding a new guardrail
-
-### Option A: a new parameter
-
-Use this when the rule needs a value someone may want to change.
-
-1. Add the value to `policy/data.json`:
-
-   ```json
-   {
-     "name_pattern": "^[a-z][a-z0-9-]{2,49}$",
-     "allowed_visibility": ["public", "private"],
-     "min_required_reviews": 1,
-     "max_description_length": 200
-   }
-   ```
-
-2. Add a rule to `policy/guardrails.rego` that reads it with `data.<name>`:
-
-   ```rego
-   deny contains msg if {
-   	some r in repos
-   	count(r.values.description) > data.max_description_length
-   	msg := sprintf("%s: description must be at most %d characters", [r.address, data.max_description_length])
-   }
-   ```
-
-3. Add a passing test and a failing test to `policy/guardrails_test.rego`.
-
-### Option B: a new Terraform setting
-
-Use this when the rule checks an attribute of a resource.
-
-1. Set the attribute in `terraform/main.tf`. If it is a new resource type, add it with `for_each = local.repositories`.
-2. Add a `deny` rule. Use `repos` for `github_repository`, or add a new set like `repos` that selects the resource type from `input.planned_values.root_module.resources`:
-
-   ```rego
-   deny contains msg if {
-   	some r in repos
-   	r.values.has_wiki == true
-   	msg := sprintf("%s: wiki must be disabled", [r.address])
-   }
-   ```
-
-   Note that `not x == true` also denies when the attribute is missing from the plan. Test the value Terraform actually sets.
-
-3. Add a passing test and a failing test to `policy/guardrails_test.rego`. A failing test builds a fake plan entry with the bad value and asserts `count(deny) == 1`.
-
-### Checklist for any new rule
-
-- Rule added to `guardrails.rego` or a parameter added to `data.json`
-- Terraform sets the attribute the rule checks
-- Passing and failing tests added
-- `conftest verify` passes locally
-- PR opened and the plan workflow shows the rule running
+The policy checks the planned state of every repo in `repos/`, including repos that are not changing. Each plan re-evaluates all repos against the current settings. Raising `min_required_reviews` therefore fails the plan for any existing repo below the new minimum.
 
 ## Setup (one time)
 
@@ -177,13 +149,13 @@ Tighten `allowed_visibility` to `["private"]` once the account has GitHub Pro, T
 
 ```bash
 cd terraform && terraform fmt -check -recursive && terraform init -backend=false && terraform validate
-cd .. && conftest verify --policy policy --data policy/data.json
+cd .. && conftest verify --policy policy --data policy/guardrails.yaml
 ```
 
-`conftest verify` runs the unit tests. To test a real plan locally, run `terraform show -json tfplan > plan.json` and then `conftest test plan.json --policy policy --data policy/data.json`.
+`conftest verify` runs the unit tests. To test a real plan locally, run `terraform show -json tfplan > plan.json` and then `conftest test plan.json --policy policy --data policy/guardrails.yaml`.
 
 ## Known gaps
 
 - The policy checks planned state from Terraform, so it only sees what the provider reads. Settings that the provider does not read, or that Terraform does not manage, are not checked.
-- Fixed guardrails are hardcoded. There is no parameter for them.
+- A new key is only validated if a config check is added for it in `policy/guardrails.rego`. Add one when you add a key.
 - The checks rely on the attribute names in the Terraform provider. A provider upgrade can rename an attribute, so the tests should be run after upgrading `integrations/github`.
