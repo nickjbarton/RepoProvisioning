@@ -116,6 +116,17 @@ resource "github_repository_vulnerability_alerts" "this" {
 resource "github_repository_dependabot_security_updates" "this" {
   for_each = local.repositories
 
+  # Dependabot security updates need vulnerability alerts enabled first. Disabling them
+  # also calls an endpoint that fails when alerts are off.
+  depends_on = [github_repository_vulnerability_alerts.this]
+
+  lifecycle {
+    precondition {
+      condition     = !local.effective[each.key].enforce_dependabot_security_updates || local.effective[each.key].enforce_vulnerability_alerts
+      error_message = "${each.key}: enforce_dependabot_security_updates requires enforce_vulnerability_alerts. Turn alerts on too."
+    }
+  }
+
   repository = github_repository.this[each.key].name
   enabled    = local.effective[each.key].enforce_dependabot_security_updates
 }
