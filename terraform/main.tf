@@ -15,6 +15,11 @@ locals {
   # Flags a repo may turn on in its own YAML under `guardrails:`.
   override_flags = [for k in keys(local.guardrails) : k if substr(k, 0, 8) == "enforce_"]
 
+  # Keys a visibility profile may set: the flags above, plus the approval minimum.
+  profile_keys = concat(local.override_flags, ["min_required_reviews"])
+
+  profiles = local.guardrails.visibility_profiles
+
   repo_files = fileset("${path.module}/../repos", "*.yaml")
 
   repositories = {
@@ -31,12 +36,17 @@ locals {
     )
   }
 
-  # Effective flag per repo: the global value, or true if the repo turns it on.
-  # A repo cannot turn a flag off (see the precondition on github_repository).
+  # Effective settings per repo: global, OR the profile for its visibility, OR its own override.
+  # A profile or repo cannot turn a flag off (see the preconditions).
   effective = {
-    for name, r in local.repositories : name => {
-      for f in local.override_flags : f => local.guardrails[f] || lookup(r.guardrails, f, false)
-    }
+    for name, r in local.repositories : name => merge(
+      {
+        for f in local.override_flags : f => local.guardrails[f] || lookup(lookup(local.profiles, r.visibility, {}), f, false) || lookup(r.guardrails, f, false)
+      },
+      {
+        min_required_reviews = max(local.guardrails.min_required_reviews, lookup(lookup(local.profiles, r.visibility, {}), "min_required_reviews", 0))
+      }
+    )
   }
 }
 
@@ -67,6 +77,24 @@ resource "github_repository" "this" {
     }
     secret_scanning_push_protection {
       status = local.effective[each.key].enforce_push_protection ? "enabled" : "disabled"
+    }
+  }
+}
+
+# Fails the plan if a visibility profile would loosen the global settings.
+resource "terraform_data" "profile_validation" {
+  input = true
+
+  lifecycle {
+    precondition {
+      condition = alltrue(flatten([
+        for vis, p in local.profiles : [
+          for k, v in p : contains(local.profile_keys, k) && (
+            k == "min_required_reviews" ? v >= local.guardrails.min_required_reviews : (v == true || lookup(local.guardrails, k, false) == false)
+          )
+        ]
+      ]))
+      error_message = "guardrails.yaml visibility_profiles can only tighten: turn enforce_* flags on, or raise min_required_reviews. Unknown keys are not allowed."
     }
   }
 }
@@ -116,7 +144,7 @@ resource "github_repository_ruleset" "default_branch" {
     required_linear_history = local.effective[each.key].enforce_ruleset_linear_history
 
     pull_request {
-      required_approving_review_count   = each.value.required_reviews
+      required_approving_review_count   = max(each.value.required_reviews, local.effective[each.key].min_required_reviews)
       dismiss_stale_reviews_on_push     = true
       require_code_owner_review         = true
       require_last_push_approval        = true

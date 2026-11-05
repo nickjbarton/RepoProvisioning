@@ -7,6 +7,10 @@
 # Flags: true = enforced (Terraform sets it, the policy requires it). false = not enforced.
 # A repo can turn any enforce_* flag ON in its own YAML (guardrails: section).
 # A repo cannot turn a flag OFF if it is ON here. Thresholds below are global.
+#
+# visibility_profiles tighten these settings for repos of one visibility.
+# A profile can turn a flag ON or raise min_required_reviews. It cannot turn a flag OFF
+# or lower a minimum. Effective setting = global OR profile OR repo override.
 # After editing, open a PR. The plan job shows which repos would fail.
 
 # Naming and visibility
@@ -30,3 +34,10 @@ enforce_branch_protection: true
 enforce_ruleset_block_deletion: true
 enforce_ruleset_block_force_push: true
 enforce_ruleset_linear_history: true
+
+# Tighter (or equal) settings by repo visibility. Keys: any enforce_* flag, or min_required_reviews.
+visibility_profiles:
+  public:
+    enforce_push_protection: true
+    min_required_reviews: 2
+  private: {}

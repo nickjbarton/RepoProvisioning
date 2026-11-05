@@ -17,6 +17,7 @@ flags_on := {
 	"enforce_ruleset_block_deletion": true,
 	"enforce_ruleset_block_force_push": true,
 	"enforce_ruleset_linear_history": true,
+	"min_required_reviews": 1,
 }
 
 with_flag(k, v) := object.union(flags_on, {k: v})
@@ -83,7 +84,6 @@ with_rules(rules) := with_values(compliant_ruleset, {"rules": [rules]})
 test_compliant_plan_passes if {
 	count(deny) == 0
 		with input as plan(array.concat(compliant_resources, [on]))
-		with data.min_required_reviews as 1
 		with data.name_pattern as "^[a-z][a-z0-9-]{2,49}$"
 		with data.allowed_visibility as ["public", "private"]
 }
@@ -168,16 +168,16 @@ test_ruleset_without_linear_history_denied if {
 
 test_ruleset_below_min_reviews_denied if {
 	bad := with_rules({"deletion": true, "non_fast_forward": true, "required_linear_history": true, "pull_request": [{"required_approving_review_count": 0}]})
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, on]) with data.min_required_reviews as 1
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, on])
 }
 
 test_ruleset_meets_raised_min_reviews if {
 	ok := with_rules({"deletion": true, "non_fast_forward": true, "required_linear_history": true, "pull_request": [{"required_approving_review_count": 2}]})
-	count(deny) == 0 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, ok, on]) with data.min_required_reviews as 2
+	count(deny) == 0 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, ok, effective_for("demo-app", with_flag("min_required_reviews", 2))])
 }
 
 test_branch_protection_on_without_ruleset_denied if {
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, on]) with data.min_required_reviews as 1
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, on])
 }
 
 test_branch_protection_off_without_ruleset_passes if {
@@ -188,7 +188,13 @@ test_branch_protection_off_without_ruleset_passes if {
 test_repo_turns_branch_protection_on_when_global_off if {
 	# Global off, repo override on: the ruleset is planned and checked.
 	repo_on := effective_for("demo-app", with_flag("enforce_branch_protection", true))
-	count(deny) == 0 with input as plan(array.concat(compliant_resources, [repo_on])) with data.min_required_reviews as 1
+	count(deny) == 0 with input as plan(array.concat(compliant_resources, [repo_on]))
+}
+
+test_profile_raises_min_reviews_denied if {
+	# Public profile sets min 2: a ruleset requiring 1 approval fails for that repo.
+	public := effective_for("demo-app", with_flag("min_required_reviews", 2))
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, compliant_ruleset, public])
 }
 
 test_missing_setting_denied if {
