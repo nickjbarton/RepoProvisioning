@@ -40,4 +40,5 @@ visibility_profiles:
   public:
     enforce_push_protection: true
     min_required_reviews: 2
-  private: {}
+  private:
+    enforce_secret_scanning: true
