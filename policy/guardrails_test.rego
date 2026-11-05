@@ -11,7 +11,6 @@ compliant_repo := {
 			"name": "demo-app",
 			"visibility": "private",
 			"delete_branch_on_merge": true,
-			"vulnerability_alerts": true,
 			"security_and_analysis": [{
 				"secret_scanning": [{"status": "enabled"}],
 				"secret_scanning_push_protection": [{"status": "enabled"}],
@@ -72,4 +71,22 @@ test_ruleset_zero_reviews_denied if {
 		"pull_request": [{"required_approving_review_count": 0}],
 	}]}}})
 	count(deny) == 1 with input as {"resource_changes": [bad]}
+}
+
+compliant_alerts := {
+	"address": "github_repository_vulnerability_alerts.this[\"demo-app\"]",
+	"type": "github_repository_vulnerability_alerts",
+	"change": {
+		"actions": ["create"],
+		"after": {"enabled": true},
+	},
+}
+
+test_alerts_disabled_denied if {
+	bad := object.union(compliant_alerts, {"change": {"actions": ["create"], "after": {"enabled": false}}})
+	count(deny) == 1 with input as {"resource_changes": [bad]}
+}
+
+test_alerts_enabled_passes if {
+	count(deny) == 0 with input as {"resource_changes": [compliant_alerts]}
 }

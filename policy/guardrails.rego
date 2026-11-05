@@ -10,6 +10,12 @@ repo_creates contains rc if {
 	"create" in rc.change.actions
 }
 
+alert_creates contains rc if {
+	some rc in input.resource_changes
+	rc.type == "github_repository_vulnerability_alerts"
+	"create" in rc.change.actions
+}
+
 ruleset_creates contains rc if {
 	some rc in input.resource_changes
 	rc.type == "github_repository_ruleset"
@@ -36,9 +42,9 @@ deny contains msg if {
 }
 
 deny contains msg if {
-	some rc in repo_creates
-	not rc.change.after.vulnerability_alerts == true
-	msg := sprintf("%s: vulnerability_alerts must be true", [rc.address])
+	some rc in alert_creates
+	not rc.change.after.enabled == true
+	msg := sprintf("%s: vulnerability alerts must be enabled", [rc.address])
 }
 
 deny contains msg if {

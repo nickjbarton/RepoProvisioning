@@ -35,7 +35,6 @@ resource "github_repository" "this" {
   auto_init              = true
   has_issues             = true
   delete_branch_on_merge = true
-  vulnerability_alerts   = true
 
   security_and_analysis {
     secret_scanning {
@@ -45,6 +44,13 @@ resource "github_repository" "this" {
       status = "enabled"
     }
   }
+}
+
+resource "github_repository_vulnerability_alerts" "this" {
+  for_each = local.repositories
+
+  repository = github_repository.this[each.key].name
+  enabled    = true
 }
 
 resource "github_repository_dependabot_security_updates" "this" {
