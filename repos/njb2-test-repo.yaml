@@ -9,4 +9,3 @@ required_reviews: 1                              # optional, default: 1
 # Per repo guardrails (Must be less permissive than defined in guardrails.yaml)
 guardrails:
   enforce_push_protection: true
-  enforce_branch_protection: false
