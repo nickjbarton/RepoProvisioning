@@ -29,8 +29,8 @@ enforce_dependabot_security_updates: true
 enforce_secret_scanning: false
 enforce_push_protection: false
 
-# Default branch protection (a ruleset on the default branch)
-enforce_branch_protection: true
+# Default branch protection (a ruleset on the default branch). Rulesets on private repos need GitHub Pro.
+enforce_branch_protection: false
 enforce_ruleset_block_deletion: true
 enforce_ruleset_block_force_push: true
 enforce_ruleset_linear_history: true
@@ -38,6 +38,7 @@ enforce_ruleset_linear_history: true
 # Tighter (or equal) settings by repo visibility. Keys: any enforce_* flag, or min_required_reviews.
 visibility_profiles:
   public:
+    enforce_branch_protection: true
     enforce_secret_scanning: true
     enforce_push_protection: true
     min_required_reviews: 2
