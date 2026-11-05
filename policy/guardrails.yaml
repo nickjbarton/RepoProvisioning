@@ -26,7 +26,7 @@ enforce_secret_scanning: true
 enforce_push_protection: false
 
 # Default branch protection (a ruleset on the default branch)
-enforce_branch_protection: false
+enforce_branch_protection: true
 enforce_ruleset_block_deletion: true
 enforce_ruleset_block_force_push: true
 enforce_ruleset_linear_history: true
