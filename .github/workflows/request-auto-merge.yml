@@ -17,8 +17,16 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
+      # GITHUB_TOKEN cannot be used here. Events it creates, such as this merge
+      # to main, do not start new workflow runs, so terraform-apply.yml would not
+      # run. REPO_AUTOMERGE_TOKEN is a PAT or GitHub App token that does trigger them.
       - name: Enable squash auto-merge
         env:
-          GH_TOKEN: ${{ github.token }}
+          AUTOMERGE_TOKEN: ${{ secrets.REPO_AUTOMERGE_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          if [ -z "$AUTOMERGE_TOKEN" ]; then
+            echo "::error::REPO_AUTOMERGE_TOKEN secret is empty or not available. Create it with contents and pull-requests write on this repo."
+            exit 1
+          fi
+          GH_TOKEN="$AUTOMERGE_TOKEN" gh pr merge --auto --squash "$PR_URL"
