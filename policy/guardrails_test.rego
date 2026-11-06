@@ -70,12 +70,18 @@ compliant_ruleset := {
 	},
 }
 
-compliant_resources := [compliant_repo, compliant_alerts, compliant_dependabot, compliant_ruleset]
+compliant_catalog := {
+	"address": "github_repository_file.catalog_info[\"demo-app\"]",
+	"type": "github_repository_file",
+	"values": {"repository": "demo-app", "file": "catalog-info.yaml"},
+}
+
+compliant_resources := [compliant_repo, compliant_alerts, compliant_dependabot, compliant_ruleset, compliant_catalog]
 
 # Compliant companions for the repo under test: everything except the repo itself.
-rest := [compliant_alerts, compliant_dependabot, compliant_ruleset, on]
+rest := [compliant_alerts, compliant_dependabot, compliant_ruleset, compliant_catalog, on]
 
-rest_with(eff) := [compliant_alerts, compliant_dependabot, compliant_ruleset, eff]
+rest_with(eff) := [compliant_alerts, compliant_dependabot, compliant_ruleset, compliant_catalog, eff]
 
 with_values(resource, changes) := object.union(resource, {"values": object.union(resource.values, changes)})
 
@@ -90,7 +96,8 @@ test_compliant_plan_passes if {
 
 test_bad_name_denied if {
 	bad := with_values(compliant_repo, {"name": "Bad_Name"})
-	count(deny) == 1 with input as plan(array.concat([bad], rest_with(effective_for("Bad_Name", with_flag("enforce_branch_protection", false))))) with data.name_pattern as "^[a-z][a-z0-9-]{2,49}$"
+	bad_catalog := with_values(compliant_catalog, {"repository": "Bad_Name"})
+	count(deny) == 1 with input as plan(array.concat([bad, bad_catalog], rest_with(effective_for("Bad_Name", with_flag("enforce_branch_protection", false))))) with data.name_pattern as "^[a-z][a-z0-9-]{2,49}$"
 }
 
 test_visibility_not_allowed_denied if {
@@ -104,7 +111,7 @@ test_visibility_allowed_when_listed if {
 }
 
 test_missing_effective_flags_denied if {
-	count(deny) == 1 with input as plan([compliant_repo]) with data.allowed_visibility as ["public", "private"]
+	count(deny) == 1 with input as plan([compliant_repo, compliant_catalog]) with data.allowed_visibility as ["public", "private"]
 }
 
 test_delete_branch_on_merge_off_denied if {
@@ -143,46 +150,46 @@ test_push_protection_disabled_denied if {
 
 test_alerts_disabled_denied if {
 	bad := with_values(compliant_alerts, {"enabled": false})
-	count(deny) == 1 with input as plan([compliant_repo, bad, compliant_dependabot, compliant_ruleset, on])
+	count(deny) == 1 with input as plan([compliant_repo, bad, compliant_dependabot, compliant_ruleset, compliant_catalog, on])
 }
 
 test_dependabot_disabled_denied if {
 	bad := with_values(compliant_dependabot, {"enabled": false})
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, bad, compliant_ruleset, on])
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, bad, compliant_ruleset, compliant_catalog, on])
 }
 
 test_ruleset_without_deletion_block_denied if {
 	bad := with_rules({"deletion": false, "non_fast_forward": true, "required_linear_history": true, "pull_request": [{"required_approving_review_count": 1}]})
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, on])
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, compliant_catalog, on])
 }
 
 test_ruleset_without_force_push_block_denied if {
 	bad := with_rules({"deletion": true, "non_fast_forward": false, "required_linear_history": true, "pull_request": [{"required_approving_review_count": 1}]})
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, on])
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, compliant_catalog, on])
 }
 
 test_ruleset_without_linear_history_denied if {
 	bad := with_rules({"deletion": true, "non_fast_forward": true, "required_linear_history": false, "pull_request": [{"required_approving_review_count": 1}]})
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, on])
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, compliant_catalog, on])
 }
 
 test_ruleset_below_min_reviews_denied if {
 	bad := with_rules({"deletion": true, "non_fast_forward": true, "required_linear_history": true, "pull_request": [{"required_approving_review_count": 0}]})
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, on])
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, bad, compliant_catalog, on])
 }
 
 test_ruleset_meets_raised_min_reviews if {
 	ok := with_rules({"deletion": true, "non_fast_forward": true, "required_linear_history": true, "pull_request": [{"required_approving_review_count": 2}]})
-	count(deny) == 0 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, ok, effective_for("demo-app", with_flag("min_required_reviews", 2))])
+	count(deny) == 0 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, ok, compliant_catalog, effective_for("demo-app", with_flag("min_required_reviews", 2))])
 }
 
 test_branch_protection_on_without_ruleset_denied if {
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, on])
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, compliant_catalog, on])
 }
 
 test_branch_protection_off_without_ruleset_passes if {
 	off := effective_for("demo-app", with_flag("enforce_branch_protection", false))
-	count(deny) == 0 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, off])
+	count(deny) == 0 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, compliant_catalog, off])
 }
 
 test_repo_turns_branch_protection_on_when_global_off if {
@@ -194,9 +201,41 @@ test_repo_turns_branch_protection_on_when_global_off if {
 test_profile_raises_min_reviews_denied if {
 	# Public profile sets min 2: a ruleset requiring 1 approval fails for that repo.
 	public := effective_for("demo-app", with_flag("min_required_reviews", 2))
-	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, compliant_ruleset, public])
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, compliant_ruleset, compliant_catalog, public])
 }
 
 test_missing_setting_denied if {
 	count(deny) == 1 with input as plan([]) with data.enforce_push_protection as null
+}
+
+test_catalog_info_missing_denied if {
+	# No catalog-info.yaml planned for the repo: the plan fails.
+	count(deny) == 1 with input as plan([compliant_repo, compliant_alerts, compliant_dependabot, compliant_ruleset, on]) with data.allowed_visibility as ["public", "private"]
+}
+
+test_owner_string_passes if {
+	owned := effective_for("demo-app", object.union(flags_on, {"owner": "user:default/nick", "template_ref": "template:default/repo-service-request"}))
+	count(deny) == 0 with input as plan(array.concat(compliant_resources, [owned]))
+		with data.name_pattern as "^[a-z][a-z0-9-]{2,49}$"
+		with data.allowed_visibility as ["public", "private"]
+}
+
+test_owner_absent_passes if {
+	count(deny) == 0 with input as plan(array.concat(compliant_resources, [on]))
+		with data.name_pattern as "^[a-z][a-z0-9-]{2,49}$"
+		with data.allowed_visibility as ["public", "private"]
+}
+
+test_owner_not_string_denied if {
+	bad := effective_for("demo-app", object.union(flags_on, {"owner": 42}))
+	count(deny) == 1 with input as plan(array.concat(compliant_resources, [bad]))
+		with data.name_pattern as "^[a-z][a-z0-9-]{2,49}$"
+		with data.allowed_visibility as ["public", "private"]
+}
+
+test_template_ref_not_string_denied if {
+	bad := effective_for("demo-app", object.union(flags_on, {"template_ref": ["template:default/x"]}))
+	count(deny) == 1 with input as plan(array.concat(compliant_resources, [bad]))
+		with data.name_pattern as "^[a-z][a-z0-9-]{2,49}$"
+		with data.allowed_visibility as ["public", "private"]
 }

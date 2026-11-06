@@ -17,6 +17,7 @@ Each YAML file becomes one set of resources in `terraform/main.tf`, created with
 | `github_repository_dependabot_security_updates` | Enabled |
 | `github_repository_ruleset` | Default branch: no deletion, no force-push, linear history, PR required, approvals required, code-owner review, stale reviews dismissed |
 | `github_repository_file` | `.github/CODEOWNERS` with `* <codeowners>` |
+| `github_repository_file` | `catalog-info.yaml` on the default branch, a Backstage `Component` with `owner` and `template-ref` from the repo file. `owner` falls back to `codeowners` when unset. |
 
 ## Repo file format
 
@@ -29,6 +30,8 @@ One file per repo, named `<repo-name>.yaml`. The file name must match the repo n
 | `visibility` | No | `default_visibility` (private) | Must be in `allowed_visibility` |
 | `topics` | No | `[]` | |
 | `required_reviews` | No | `default_required_reviews` (1) | Must be at least `min_required_reviews` |
+| `owner` | No | `codeowners` converted to a catalog ref: `@user` becomes `user:default/user`, `@org/team` becomes `group:default/team` | Backstage catalog entity ref, for example `user:default/nick`. Must be a string. |
+| `template_ref` | No | None | Backstage template ref, for example `template:default/repo-service-request`. Written to `catalog-info.yaml` as `backstage.io/template-ref`. Must be a string. |
 | `guardrails` | No | None | Turns `enforce_*` flags on for this repo only. See [Per-repo guardrails](#per-repo-guardrails). |
 
 ## Guardrails
