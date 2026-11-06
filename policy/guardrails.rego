@@ -39,6 +39,13 @@ ruleset_repos contains name if {
 	name := rs.values.repository
 }
 
+catalog_repos contains name if {
+	some f in input.planned_values.root_module.resources
+	f.type == "github_repository_file"
+	f.values.file == "catalog-info.yaml"
+	name := f.values.repository
+}
+
 # Config checks: a missing key would otherwise silently turn a rule off.
 deny contains msg if {
 	not data.name_pattern
@@ -211,6 +218,28 @@ deny contains msg if {
 	some rs in rulesets
 	count(object.get(rs.values, "rules", [])) == 0
 	msg := sprintf("%s: ruleset has no rules", [rs.address])
+}
+
+# Optional repo keys: owner and template_ref must be strings when set.
+deny contains msg if {
+	some name, g in effective
+	g.owner != null
+	not is_string(g.owner)
+	msg := sprintf("%s: owner must be a string (catalog entity ref)", [name])
+}
+
+deny contains msg if {
+	some name, g in effective
+	g.template_ref != null
+	not is_string(g.template_ref)
+	msg := sprintf("%s: template_ref must be a string (catalog template ref)", [name])
+}
+
+# Every repo must have its catalog-info.yaml planned.
+deny contains msg if {
+	some r in repos
+	not r.values.name in catalog_repos
+	msg := sprintf("%s: catalog-info.yaml must be planned for this repo", [r.address])
 }
 
 secret_scanning_enabled(saa) if {

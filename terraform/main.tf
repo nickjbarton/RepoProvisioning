@@ -31,9 +31,20 @@ locals {
         default_branch   = "main"
         required_reviews = local.guardrails.default_required_reviews
         guardrails       = {}
+        owner            = null
+        template_ref     = null
       },
       yamldecode(file("${path.module}/../repos/${f}"))
     )
+  }
+
+  # Catalog owner when repos/<name>.yaml does not set one: @user -> user:default/user, @org/team -> group:default/team.
+  codeowner_ref = {
+    for k, r in local.repositories : k => length(split("/", trimprefix(r.codeowners, "@"))) == 2 ? "group:default/${split("/", trimprefix(r.codeowners, "@"))[1]}" : "user:default/${trimprefix(r.codeowners, "@")}"
+  }
+
+  catalog_owner = {
+    for k, r in local.repositories : k => coalesce(r.owner, local.codeowner_ref[k])
   }
 
   # Effective settings per repo: global, OR the profile for its visibility, OR its own override.
@@ -60,6 +71,16 @@ resource "github_repository" "this" {
         contains(local.override_flags, f) && (v == true || lookup(local.guardrails, f, false) == false)
       ])
       error_message = "${each.key}: guardrails in the repo file can only turn a guardrail on. Remove unknown keys and any false value for a guardrail that is on in policy/guardrails.yaml."
+    }
+
+    precondition {
+      condition     = try(tostring(each.value.owner) == each.value.owner, each.value.owner == null)
+      error_message = "${each.key}: owner must be a string, for example user:default/nick."
+    }
+
+    precondition {
+      condition     = try(tostring(each.value.template_ref) == each.value.template_ref, each.value.template_ref == null)
+      error_message = "${each.key}: template_ref must be a string, for example template:default/repo-service-request."
     }
   }
 
@@ -103,7 +124,7 @@ resource "terraform_data" "profile_validation" {
 resource "terraform_data" "effective_guardrails" {
   for_each = local.repositories
 
-  input = merge({ name = each.key }, local.effective[each.key])
+  input = merge({ name = each.key, owner = each.value.owner, template_ref = each.value.template_ref }, local.effective[each.key])
 }
 
 resource "github_repository_vulnerability_alerts" "this" {
@@ -172,6 +193,36 @@ resource "github_repository_file" "codeowners" {
   file                = ".github/CODEOWNERS"
   content             = "* ${each.value.codeowners}\n"
   commit_message      = "Add CODEOWNERS (managed by Terraform)"
+  commit_author       = "repo-provisioning"
+  commit_email        = "repo-provisioning@users.noreply.github.com"
+  overwrite_on_create = true
+}
+
+# Backstage catalog entry. Written to the default branch of every repo in repos/.
+resource "github_repository_file" "catalog_info" {
+  for_each = local.repositories
+
+  repository = github_repository.this[each.key].name
+  branch     = github_repository.this[each.key].default_branch
+  file       = "catalog-info.yaml"
+  content = yamlencode({
+    apiVersion = "backstage.io/v1alpha1"
+    kind       = "Component"
+    metadata = {
+      name        = each.key
+      description = each.value.description
+      annotations = merge(
+        { "github.com/project-slug" = github_repository.this[each.key].full_name },
+        each.value.template_ref == null ? tomap({}) : tomap({ "backstage.io/template-ref" = each.value.template_ref })
+      )
+    }
+    spec = {
+      type      = "service"
+      lifecycle = "experimental"
+      owner     = local.catalog_owner[each.key]
+    }
+  })
+  commit_message      = "Add catalog-info.yaml (managed by Terraform)"
   commit_author       = "repo-provisioning"
   commit_email        = "repo-provisioning@users.noreply.github.com"
   overwrite_on_create = true
