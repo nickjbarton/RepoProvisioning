@@ -1,0 +1,5 @@
+description: "Testing the auto approval"
+codeowners: "@nickjbarton"
+visibility: private
+topics: []
+required_reviews: 1
