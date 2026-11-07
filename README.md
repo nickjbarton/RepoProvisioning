@@ -31,6 +31,8 @@ One file per repo, named `<repo-name>.yaml`. The file name must match the repo n
 | `required_reviews` | No | `default_required_reviews` (1) | Must be at least `min_required_reviews` |
 | `owner` | No | None | Backstage catalog entity ref, for example `user:default/nick`. Must be a string. Read by the Backstage entity provider. |
 | `template_ref` | No | None | Backstage template ref, for example `template:default/repo-service-request`. Must be a string. Read by the Backstage entity provider. |
+| `type` | No | `service` | Backstage Component type, for example `documentation`. Must be a string. Read by the Backstage entity provider. |
+| `techdocs_ref` | No | None | TechDocs source, for example `url:https://github.com/org/repo`. Written to `backstage.io/techdocs-ref`. Must be a string. Read by the Backstage entity provider. |
 | `guardrails` | No | None | Turns `enforce_*` flags on for this repo only. See [Per-repo guardrails](#per-repo-guardrails). |
 
 ## Guardrails
