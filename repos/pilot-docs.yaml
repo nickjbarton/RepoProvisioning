@@ -3,5 +3,3 @@ codeowners: "@nickjbarton"
 visibility: private
 topics: []
 required_reviews: 1
-type: documentation
-techdocs_ref: "url:https://github.com/nickjbartonorg/pilot-docs"
