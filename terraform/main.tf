@@ -38,15 +38,6 @@ locals {
     )
   }
 
-  # Catalog owner when repos/<name>.yaml does not set one: @user -> user:default/user, @org/team -> group:default/team.
-  codeowner_ref = {
-    for k, r in local.repositories : k => length(split("/", trimprefix(r.codeowners, "@"))) == 2 ? "group:default/${split("/", trimprefix(r.codeowners, "@"))[1]}" : "user:default/${trimprefix(r.codeowners, "@")}"
-  }
-
-  catalog_owner = {
-    for k, r in local.repositories : k => coalesce(r.owner, local.codeowner_ref[k])
-  }
-
   # Effective settings per repo: global, OR the profile for its visibility, OR its own override.
   # A profile or repo cannot turn a flag off (see the preconditions).
   effective = {
@@ -198,32 +189,12 @@ resource "github_repository_file" "codeowners" {
   overwrite_on_create = true
 }
 
-# Backstage catalog entry. Written to the default branch of every repo in repos/.
-resource "github_repository_file" "catalog_info" {
-  for_each = local.repositories
+# Drops catalog-info.yaml from state only. The file stays in each repo and no commit is made,
+# so default-branch rulesets that require a PR do not block the apply.
+removed {
+  from = github_repository_file.catalog_info
 
-  repository = github_repository.this[each.key].name
-  branch     = github_repository.this[each.key].default_branch
-  file       = "catalog-info.yaml"
-  content = yamlencode({
-    apiVersion = "backstage.io/v1alpha1"
-    kind       = "Component"
-    metadata = {
-      name        = each.key
-      description = each.value.description
-      annotations = merge(
-        { "github.com/project-slug" = github_repository.this[each.key].full_name },
-        each.value.template_ref == null ? tomap({}) : tomap({ "backstage.io/template-ref" = each.value.template_ref })
-      )
-    }
-    spec = {
-      type      = "service"
-      lifecycle = "experimental"
-      owner     = local.catalog_owner[each.key]
-    }
-  })
-  commit_message      = "Add catalog-info.yaml (managed by Terraform)"
-  commit_author       = "repo-provisioning"
-  commit_email        = "repo-provisioning@users.noreply.github.com"
-  overwrite_on_create = true
+  lifecycle {
+    destroy = false
+  }
 }
